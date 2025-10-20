@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import axios from "axios";
-import { getContract } from "./ethers.js";
+import { getContract } from "./ethers";
 import { ethers } from "ethers";
 
+// Convert string to bytes32 safely
 function toBytes32(str) {
   const bytes = new TextEncoder().encode(str);
   if (bytes.length > 32) throw new Error("String too long for bytes32");
@@ -11,37 +12,37 @@ function toBytes32(str) {
   return ethers.hexlify(padded);
 }
 
-
 export default function CertificateForm() {
   const [file, setFile] = useState(null);
   const [certId, setCertId] = useState("");
   const [ipfsCid, setIpfsCid] = useState("");
   const [certificateData, setCertificateData] = useState(null);
 
-  // --- UPLOAD TO IPFS ---
+  // --- Upload to IPFS ---
   const uploadToIPFS = async () => {
     if (!file) return alert("Please select a file first.");
     try {
       const formData = new FormData();
       formData.append("file", file);
-
       const res = await axios.post("http://127.0.0.1:5001/api/v0/add", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      // IPFS returns JSON when using API; adjust for your setup
-      const cid = res.data?.Hash || res.data; 
-      if (!cid) return alert("❌ Could not parse CID from IPFS response");
-
-      setIpfsCid(cid);
-      alert(`✅ Uploaded to IPFS: ${cid}`);
+      const cid = res.data.Hash || res.data.cid || res.data.IpfsHash;
+      if (cid) {
+        setIpfsCid(cid);
+        alert(`✅ Uploaded to IPFS: ${cid}`);
+      } else {
+        console.error(res.data);
+        alert("❌ Could not parse CID from IPFS response");
+      }
     } catch (err) {
       console.error(err);
       alert("❌ IPFS Upload Failed");
     }
   };
 
-  // --- ISSUE CERTIFICATE ---
+  // --- Issue Certificate ---
   const issueCertificate = async () => {
     if (!ipfsCid) return alert("Please upload the file to IPFS first.");
     if (!certId) return alert("Please enter a certificate ID.");
@@ -57,16 +58,16 @@ export default function CertificateForm() {
     }
   };
 
-  // --- VERIFY CERTIFICATE ---
+  // --- Verify Certificate ---
   const verifyCertificate = async () => {
     if (!certId) return alert("Please enter the certificate ID to verify.");
-
     try {
       const contract = getContract();
       const data = await contract.getCertificate(toBytes32(certId));
 
-      if (!data || data.issuer === "0x0000000000000000000000000000000000000000") {
-        return alert("❌ Certificate not found or invalid");
+      if (!data || !data.ipfsCid) {
+        alert("❌ Certificate not found on blockchain");
+        return;
       }
 
       setCertificateData({
@@ -99,26 +100,17 @@ export default function CertificateForm() {
         className="w-full mb-4"
       />
 
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={uploadToIPFS}
-          className="bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          Upload to IPFS
-        </button>
+      <button onClick={uploadToIPFS} className="bg-blue-600 text-white px-4 py-2 rounded mr-2">
+        Upload to IPFS
+      </button>
 
-        <button
-          onClick={issueCertificate}
-          className="bg-purple-600 text-white px-4 py-2 rounded"
-        >
-          Issue Certificate
-        </button>
-      </div>
+      <button onClick={issueCertificate} className="bg-purple-600 text-white px-4 py-2 rounded">
+        Issue Certificate
+      </button>
 
-      <button
-        onClick={verifyCertificate}
-        className="bg-green-600 text-white px-4 py-2 rounded mb-4"
-      >
+      <hr className="my-6" />
+
+      <button onClick={verifyCertificate} className="bg-green-600 text-white px-4 py-2 rounded">
         Verify Certificate
       </button>
 

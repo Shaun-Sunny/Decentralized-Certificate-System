@@ -1,35 +1,20 @@
-import React, { useEffect, useState } from "react";
-import CertificateForm from "./CertificateForm.jsx";
-import { provider, signer } from "./ethers.js";
+import React from "react";
+import CertificateForm from "./CertificateForm";
 
 export default function App() {
-  const [account, setAccount] = useState("");
-
-  // Fetch the signer address
-  const fetchAccount = async () => {
-    try {
-      const address = await signer.getAddress();
-      setAccount(address);
-    } catch (err) {
-      console.error("Error fetching account:", err);
-      setAccount("Could not fetch account");
-    }
-  };
-
-  useEffect(() => {
-    fetchAccount();
-  }, []);
-
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <header className="text-center mb-6">
-        <h1 className="text-3xl font-bold mb-2">Decentralized Certificate System</h1>
-        <p className="text-gray-700">
-          Connected account: <strong>{account}</strong>
-        </p>
-      </header>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 flex items-center justify-center p-8">
+      <div className="w-full max-w-2xl bg-white shadow-lg rounded-2xl p-6">
+        <h1 className="text-2xl font-bold text-center mb-6 text-blue-600">
+          🎓 Decentralized Certificate Verification
+        </h1>
 
-      <CertificateForm />
+        <CertificateForm />
+
+        <footer className="mt-8 text-center text-gray-500 text-sm">
+          Powered by <span className="font-semibold text-blue-500">Ethereum + IPFS</span>
+        </footer>
+      </div>
     </div>
   );
 }
