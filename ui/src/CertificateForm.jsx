@@ -1,139 +1,185 @@
 import React, { useState } from "react";
 import axios from "axios";
-import { getContract } from "./ethers";
 import { ethers } from "ethers";
+import { getContract } from "./ethers.js";
 
-// Convert string to bytes32 safely
+// Helper: Convert string → bytes32
 function toBytes32(str) {
-  const bytes = new TextEncoder().encode(str);
-  if (bytes.length > 32) throw new Error("String too long for bytes32");
-  const padded = new Uint8Array(32);
-  padded.set(bytes);
-  return ethers.hexlify(padded);
+  return ethers.encodeBytes32String(str);
 }
 
 export default function CertificateForm() {
+  const [certName, setCertName] = useState("");
   const [file, setFile] = useState(null);
-  const [certId, setCertId] = useState("");
-  const [ipfsCid, setIpfsCid] = useState("");
+  const [status, setStatus] = useState("");
   const [certificateData, setCertificateData] = useState(null);
 
-  // --- Upload to IPFS ---
+  // ✅ Upload file to IPFS
   const uploadToIPFS = async () => {
-    if (!file) return alert("Please select a file first.");
+    if (!file) {
+      setStatus("⚠️ Please select a file first.");
+      return null;
+    }
+
     try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await axios.post("http://127.0.0.1:5001/api/v0/add", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const cid = res.data.Hash || (res.data.match(/Qm\w+/) || [])[0];
+      if (!cid) throw new Error("Could not parse IPFS CID.");
+
+      setStatus(`✅ Uploaded to IPFS: ${cid}`);
+      return cid;
+    } catch (err) {
+      console.error("IPFS Upload Error:", err);
+      setStatus("❌ IPFS upload failed: " + err.message);
+      return null;
+    }
+  };
+
+  // ✅ Issue certificate
+  const issueCertificate = async () => {
+    try {
+      if (!file || !certName) {
+        setStatus("⚠️ Please enter a certificate name and upload a file.");
+        return;
+      }
+
+      setStatus("⏳ Uploading file to IPFS...");
+      const cid = await uploadToIPFS();
+      if (!cid) return;
+
+      const contract = getContract();
+      const certId = toBytes32(certName);
+
+      const tx = await contract.issueCertificate(certId, cid);
+      await tx.wait();
+
+      setStatus(`🎉 Certificate issued successfully! Tx: ${tx.hash}`);
+    } catch (err) {
+      console.error("Issue Certificate Error:", err);
+      setStatus("❌ Issue failed: " + err.message);
+    }
+  };
+
+  // ✅ Verify certificate (name + file match)
+  const verifyCertificate = async () => {
+    setStatus("⏳ Verifying certificate...");
+    setCertificateData(null);
+
+    try {
+      const contract = getContract();
+      const certId = toBytes32(certName);
+
+      // 1️⃣ Fetch on-chain record
+      const cert = await contract.getCertificate(certId);
+      if (!cert.issuer || cert.issuer === ethers.ZeroAddress) {
+        setStatus("❌ Certificate not found on blockchain.");
+        return;
+      }
+
+      // 2️⃣ Upload the provided file to IPFS for comparison
+      if (!file) {
+        setStatus("⚠️ Please select the certificate file to verify.");
+        return;
+      }
+
       const formData = new FormData();
       formData.append("file", file);
       const res = await axios.post("http://127.0.0.1:5001/api/v0/add", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      const cid = res.data.Hash || res.data.cid || res.data.IpfsHash;
-      if (cid) {
-        setIpfsCid(cid);
-        alert(`✅ Uploaded to IPFS: ${cid}`);
-      } else {
-        console.error(res.data);
-        alert("❌ Could not parse CID from IPFS response");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("❌ IPFS Upload Failed");
-    }
-  };
-
-  // --- Issue Certificate ---
-  const issueCertificate = async () => {
-    if (!ipfsCid) return alert("Please upload the file to IPFS first.");
-    if (!certId) return alert("Please enter a certificate ID.");
-
-    try {
-      const contract = getContract();
-      const tx = await contract.issueCertificate(toBytes32(certId), ipfsCid);
-      await tx.wait();
-      alert(`🎉 Certificate issued successfully! Tx: ${tx.hash}`);
-    } catch (err) {
-      console.error("Issue Certificate Error:", err);
-      alert("❌ Failed to issue certificate");
-    }
-  };
-
-  // --- Verify Certificate ---
-  const verifyCertificate = async () => {
-    if (!certId) return alert("Please enter the certificate ID to verify.");
-    try {
-      const contract = getContract();
-      const data = await contract.getCertificate(toBytes32(certId));
-
-      if (!data || !data.ipfsCid) {
-        alert("❌ Certificate not found on blockchain");
+      const uploadedCid = res.data.Hash || (res.data.match(/Qm\w+/) || [])[0];
+      if (!uploadedCid) {
+        setStatus("❌ Could not compute IPFS hash of uploaded file.");
         return;
       }
 
+      // 3️⃣ Compare CID with the one on-chain
+      if (cert.ipfsCid.trim() !== uploadedCid.trim()) {
+        setStatus("❌ Certificate file does NOT match blockchain record.");
+        return;
+      }
+
+      // 4️⃣ Display verified details
       setCertificateData({
-        issuer: data.issuer,
-        ipfsCid: data.ipfsCid,
-        issuedAt: new Date(Number(data.issuedAt) * 1000).toLocaleString(),
-        valid: data.valid,
+        issuer: cert.issuer,
+        ipfsCid: cert.ipfsCid,
+        issuedAt: new Date(Number(cert.issuedAt) * 1000).toLocaleString(),
+        valid: cert.valid,
       });
+
+      setStatus("✅ Certificate successfully verified!");
     } catch (err) {
       console.error("Verify Certificate Error:", err);
-      alert("❌ Certificate not found or invalid");
+      setStatus("❌ Verification failed: " + err.message);
     }
   };
 
   return (
-    <div className="p-6 max-w-xl mx-auto bg-white shadow-lg rounded-2xl">
-      <h2 className="text-xl font-semibold mb-4 text-center">🎓 Certificate Management</h2>
+    <div className="p-6 max-w-lg mx-auto bg-white rounded-2xl shadow-lg">
+      <h2 className="text-2xl font-bold mb-4 text-center">🎓 Certificate Issuer</h2>
 
       <input
         type="text"
-        placeholder="Enter certificate ID"
-        value={certId}
-        onChange={(e) => setCertId(e.target.value)}
-        className="w-full border p-2 rounded mb-4"
+        placeholder="Enter certificate name"
+        value={certName}
+        onChange={(e) => setCertName(e.target.value)}
+        className="border p-2 w-full rounded mb-3"
       />
 
       <input
+        id="fileInput"
         type="file"
         onChange={(e) => setFile(e.target.files[0])}
-        className="w-full mb-4"
+        className="border p-2 w-full rounded mb-3"
       />
 
-      <button onClick={uploadToIPFS} className="bg-blue-600 text-white px-4 py-2 rounded mr-2">
-        Upload to IPFS
-      </button>
+      <div className="flex justify-between">
+        <button
+          onClick={issueCertificate}
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Issue Certificate
+        </button>
 
-      <button onClick={issueCertificate} className="bg-purple-600 text-white px-4 py-2 rounded">
-        Issue Certificate
-      </button>
+        <button
+          onClick={verifyCertificate}
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+        >
+          Verify Certificate
+        </button>
+      </div>
 
-      <hr className="my-6" />
-
-      <button onClick={verifyCertificate} className="bg-green-600 text-white px-4 py-2 rounded">
-        Verify Certificate
-      </button>
+      <p className="mt-4 text-sm">{status}</p>
 
       {certificateData && (
-        <div className="mt-6 bg-gray-100 p-4 rounded-xl">
+        <div className="mt-5 border-t pt-4">
           <h3 className="font-semibold mb-2">✅ Certificate Details:</h3>
           <p><strong>Issuer:</strong> {certificateData.issuer}</p>
           <p><strong>IPFS CID:</strong> {certificateData.ipfsCid}</p>
           <p><strong>Issued At:</strong> {certificateData.issuedAt}</p>
           <p><strong>Valid:</strong> {certificateData.valid ? "Yes" : "No"}</p>
 
-          {certificateData.ipfsCid && (
-            <a
-              href={`https://ipfs.io/ipfs/${certificateData.ipfsCid}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 underline mt-2 inline-block"
-            >
-              🔗 View Certificate on IPFS
-            </a>
-          )}
+          <a
+            href={`http://127.0.0.1:8080/ipfs/${certificateData.ipfsCid}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 underline block mt-2"
+          >
+            🔗 View Certificate (Local IPFS Gateway)
+          </a>
         </div>
       )}
+
+      <p className="mt-5 text-xs text-gray-500 text-center">
+        Powered by Ethereum + IPFS
+      </p>
     </div>
   );
 }
