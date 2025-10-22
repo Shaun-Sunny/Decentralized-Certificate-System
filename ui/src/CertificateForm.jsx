@@ -3,7 +3,6 @@ import axios from "axios";
 import { ethers } from "ethers";
 import { getContract } from "./ethers.js";
 
-// Helper: Convert string → bytes32
 function toBytes32(str) {
   return ethers.encodeBytes32String(str);
 }
@@ -11,10 +10,9 @@ function toBytes32(str) {
 export default function CertificateForm() {
   const [certName, setCertName] = useState("");
   const [file, setFile] = useState(null);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("Please connect your wallet to begin.");
   const [certificateData, setCertificateData] = useState(null);
 
-  // ✅ Upload file to IPFS
   const uploadToIPFS = async () => {
     if (!file) {
       setStatus("⚠️ Please select a file first.");
@@ -29,19 +27,17 @@ export default function CertificateForm() {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      const cid = res.data.Hash || (res.data.match(/Qm\w+/) || [])[0];
+      const cid = res.data.Hash || (res.data.match(/Qm\\w+/) || [])[0];
       if (!cid) throw new Error("Could not parse IPFS CID.");
 
       setStatus(`✅ Uploaded to IPFS: ${cid}`);
       return cid;
     } catch (err) {
-      console.error("IPFS Upload Error:", err);
       setStatus("❌ IPFS upload failed: " + err.message);
       return null;
     }
   };
 
-  // ✅ Issue certificate
   const issueCertificate = async () => {
     try {
       if (!file || !certName) {
@@ -61,12 +57,10 @@ export default function CertificateForm() {
 
       setStatus(`🎉 Certificate issued successfully! Tx: ${tx.hash}`);
     } catch (err) {
-      console.error("Issue Certificate Error:", err);
       setStatus("❌ Issue failed: " + err.message);
     }
   };
 
-  // ✅ Verify certificate (name + file match)
   const verifyCertificate = async () => {
     setStatus("⏳ Verifying certificate...");
     setCertificateData(null);
@@ -75,14 +69,12 @@ export default function CertificateForm() {
       const contract = getContract();
       const certId = toBytes32(certName);
 
-      // 1️⃣ Fetch on-chain record
       const cert = await contract.getCertificate(certId);
       if (!cert.issuer || cert.issuer === ethers.ZeroAddress) {
         setStatus("❌ Certificate not found on blockchain.");
         return;
       }
 
-      // 2️⃣ Upload the provided file to IPFS for comparison
       if (!file) {
         setStatus("⚠️ Please select the certificate file to verify.");
         return;
@@ -94,19 +86,17 @@ export default function CertificateForm() {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      const uploadedCid = res.data.Hash || (res.data.match(/Qm\w+/) || [])[0];
+      const uploadedCid = res.data.Hash || (res.data.match(/Qm\\w+/) || [])[0];
       if (!uploadedCid) {
         setStatus("❌ Could not compute IPFS hash of uploaded file.");
         return;
       }
 
-      // 3️⃣ Compare CID with the one on-chain
       if (cert.ipfsCid.trim() !== uploadedCid.trim()) {
         setStatus("❌ Certificate file does NOT match blockchain record.");
         return;
       }
 
-      // 4️⃣ Display verified details
       setCertificateData({
         issuer: cert.issuer,
         ipfsCid: cert.ipfsCid,
@@ -116,70 +106,89 @@ export default function CertificateForm() {
 
       setStatus("✅ Certificate successfully verified!");
     } catch (err) {
-      console.error("Verify Certificate Error:", err);
       setStatus("❌ Verification failed: " + err.message);
     }
   };
 
   return (
-    <div className="p-6 max-w-lg mx-auto bg-white rounded-2xl shadow-lg">
-      <h2 className="text-2xl font-bold mb-4 text-center">🎓 Certificate Issuer</h2>
+    <div className="p-8 max-w-xl mx-auto bg-white rounded-3xl shadow-xl border border-indigo-100 transform transition-all duration-300 hover:scale-[1.01]">
+      <h2 className="text-3xl font-bold mb-6 text-center text-indigo-700">
+        Certificate Management
+      </h2>
 
-      <input
-        type="text"
-        placeholder="Enter certificate name"
-        value={certName}
-        onChange={(e) => setCertName(e.target.value)}
-        className="border p-2 w-full rounded mb-3"
-      />
+      <div className="space-y-4 mb-6">
+        <input
+          type="text"
+          placeholder="Enter certificate name (e.g., 'Graduation2023')"
+          value={certName}
+          onChange={(e) => setCertName(e.target.value)}
+          className="border border-indigo-300 p-3 w-full rounded-lg bg-indigo-50 text-indigo-800 placeholder-indigo-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200 ease-in-out shadow-sm"
+        />
 
-      <input
-        id="fileInput"
-        type="file"
-        onChange={(e) => setFile(e.target.files[0])}
-        className="border p-2 w-full rounded mb-3"
-      />
+        <input
+          id="fileInput"
+          type="file"
+          onChange={(e) => setFile(e.target.files[0])}
+          className="block w-full text-sm text-indigo-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 transition duration-200 ease-in-out cursor-pointer"
+        />
+      </div>
 
-      <div className="flex justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
         <button
           onClick={issueCertificate}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          className="w-full bg-indigo-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:-translate-y-1 hover:shadow-lg"
         >
-          Issue Certificate
+          Issue
         </button>
 
         <button
           onClick={verifyCertificate}
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+          className="w-full bg-purple-600 text-white px-5 py-3 rounded-xl font-semibold hover:bg-purple-700 transition duration-300 ease-in-out transform hover:-translate-y-1 hover:shadow-lg"
         >
-          Verify Certificate
+          Verify
         </button>
       </div>
 
-      <p className="mt-4 text-sm">{status}</p>
+      <p className="mt-8 text-md text-center p-3 bg-indigo-50 rounded-lg break-words text-indigo-700 border border-indigo-200 shadow-inner animate-fade-in delay-300">
+        {status}
+      </p>
 
       {certificateData && (
-        <div className="mt-5 border-t pt-4">
-          <h3 className="font-semibold mb-2">✅ Certificate Details:</h3>
-          <p><strong>Issuer:</strong> {certificateData.issuer}</p>
-          <p><strong>IPFS CID:</strong> {certificateData.ipfsCid}</p>
-          <p><strong>Issued At:</strong> {certificateData.issuedAt}</p>
-          <p><strong>Valid:</strong> {certificateData.valid ? "Yes" : "No"}</p>
-
-          <a
-            href={`http://127.0.0.1:8080/ipfs/${certificateData.ipfsCid}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 underline block mt-2"
+        <div className="mt-8 border-t border-indigo-200 pt-6 animate-fade-in delay-400">
+          <h3
+            className={`font-bold mb-3 text-xl ${
+              certificateData.valid ? "text-green-700" : "text-red-700"
+            } text-center`}
           >
-            🔗 View Certificate (Local IPFS Gateway)
-          </a>
+            {certificateData.valid ? "✅ Valid Certificate" : "❌ Certificate Revoked"}
+          </h3>
+
+          <div className="space-y-2 text-md bg-indigo-50 p-4 rounded-lg border border-indigo-200 shadow-md">
+            <p>
+              <strong>Issuer:</strong>{" "}
+              <span className="font-mono text-sm text-gray-700">{certificateData.issuer}</span>
+            </p>
+            <p>
+              <strong>IPFS CID:</strong>{" "}
+              <span className="font-mono text-sm text-gray-700">{certificateData.ipfsCid}</span>
+            </p>
+            <p>
+              <strong>Issued At:</strong>{" "}
+              <span className="text-gray-700">{certificateData.issuedAt}</span>
+            </p>
+          </div>
         </div>
       )}
 
-      <p className="mt-5 text-xs text-gray-500 text-center">
-        Powered by Ethereum + IPFS
-      </p>
+      <style>{`
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
+        .delay-300 { animation-delay: 0.3s; }
+        .delay-400 { animation-delay: 0.4s; }
+      `}</style>
     </div>
   );
 }
