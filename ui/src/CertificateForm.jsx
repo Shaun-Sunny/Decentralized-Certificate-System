@@ -176,6 +176,14 @@ export default function CertificateForm() {
               <strong>Issued At:</strong>{" "}
               <span className="text-gray-700">{certificateData.issuedAt}</span>
             </p>
+                <a
+      href={`http://127.0.0.1:8080/ipfs/${certificateData.ipfsCid}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block mt-3 text-purple-700 font-semibold underline hover:text-purple-800 transition-all duration-300"
+    >
+      🔗 View Certificate (Local IPFS Gateway)
+    </a>
           </div>
         </div>
       )}

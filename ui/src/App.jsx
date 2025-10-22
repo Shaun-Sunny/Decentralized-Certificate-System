@@ -11,7 +11,7 @@ export default function App() {
             🎓 Decentralized Certificate
           </h1>
           <p className="text-purple-700 mt-3 text-lg animate-fade-in-up delay-100">
-            Issue, Verify, and Revoke with Blockchain & IPFS
+            Issue and Verify with Blockchain & IPFS
           </p>
         </div>
 
